@@ -1,0 +1,22 @@
+body {
+    font-family: Arial, sans-serif;
+    background: #f0f2f5;
+    color: #333;
+    text-align: center;
+}
+
+.container {
+    max-width: 600px;
+    margin: 50px auto;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.card {
+    background: #e1f5fe;
+    border: 1px solid #81d4fa;
+    border-radius: 5px;
+    padding: 15px;
+    margin-top: 20px;
+}
