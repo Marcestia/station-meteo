@@ -149,6 +149,37 @@
             padding: 20px;
             width: 250px;
         }
+        @media (max-width: 480px) {
+            .uniform-card {
+                width: 100% !important;
+                min-width: unset;
+                margin: 0 auto 20px auto;
+            }
+
+            .current-weather-card,
+            .esp32-card,
+            .daily-bulletin-card {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+            }
+
+            .weather-icon {
+                margin: 0 auto 15px auto;
+                text-align: center;
+            }
+
+            .weather-details {
+                width: 100%;
+            }
+
+            table {
+                display: block;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                white-space: nowrap;
+            }
+        }
+
 
         .menu-content h2 {
             margin-top: 0;
