@@ -270,6 +270,14 @@
                     {% else %}
                         ☁️
                     {% endif %}
+                    {% if tides_data %}
+                        <h3>Marées pour {{ selected_location|capitalize }} :</h3>
+                        <ul>
+                            {% for tide in tides_data %}
+                            <li>{{ tide.time }} - {{ tide.height }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
                 </div>
                 <div class="weather-details">
                     <h2>Météo actuelle</h2>
@@ -283,6 +291,8 @@
                             {% endif %}
                         </strong> kt
                         <span class="wind-arrow" style="transform: rotate({{ current_wind_direction|round(0) if current_wind_direction is not none else 0 }}deg);">↑</span>
+                        
+
                     </p>
                 </div>
             </div>
