@@ -113,33 +113,6 @@ def get_openmeteo_forecast(lat, lon):
         return None
 
 
-def get_tide_data_for_location(name):
-    tide_locations = {
-        "anglet": {"lat": 43.4830, "lon": -1.5450},
-        "lacanau": {"lat": 45.0047, "lon": -1.2039},
-        "lormont": {"lat": 44.8600, "lon": -0.5330}
-    }
-
-    location = tide_locations.get(name)
-    if not location:
-        return None
-
-    try:
-        response = requests.get(
-            f"https://www.worldtides.info/api/v3?heights&lat={location['lat']}&lon={location['lon']}&key=YOUR_API_KEY"
-        )
-        data = response.json()
-        marées = []
-        for entry in data.get("heights", []):
-            dt = datetime.datetime.utcfromtimestamp(entry["dt"])
-            marées.append({
-                "time": dt.strftime("%H:%M"),
-                "height": f"{entry['height']:.2f} m"
-            })
-        return marées
-    except Exception as e:
-        print(f"[EXCEPTION] Marées {name} : {e}")
-        return None
 
 
 
@@ -360,10 +333,6 @@ def dashboard():
     openmeteo_forecast = get_openmeteo_forecast(coords["lat"], coords["lon"])
 
     grouped_avg = {}
-    tides_data = {}
-    if location_key in ["anglet", "lormont", "lacanau"]:
-        tides_data = get_tide_data_for_location(location_key)
-
 
     if selected_model == "gfs" and gfs_forecast:
         model_data = gfs_forecast
@@ -518,9 +487,7 @@ def dashboard():
                        current_wind_direction=current_wind_direction,
                        current_date=current_date, 
                        daily_bulletin=daily_bulletin,
-                       bulletin_date_label=bulletin_date_label,
-                       tides_data=tides_data,
-
+                       bulletin_date_label=bulletin_date_label
                        )
 
 
