@@ -147,13 +147,14 @@
     <div>
       <h3 style="margin: 10px 0; text-align:center;">🕘 {{ bulletin_date_label }}</h3>
       <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
-        {% for item in daily_bulletin %}
+        {% for item in daily_bulletin if item.hour in ["08:00", "11:00", "14:00", "17:00", "20:00"] %}
           <div style="text-align:center; width: 60px;">
-            <div style="font-size: 1.4rem;">{{ item.icon }}</div>
+            <div style="font-size: 1.5rem;">{{ item.icon }}</div>
             <div><strong>{{ item.hour }}</strong></div>
             <div>{{ item.temp }}</div>
           </div>
         {% endfor %}
+
       </div>
     </div>
   </div>
