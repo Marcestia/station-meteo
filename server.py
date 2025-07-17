@@ -20,7 +20,12 @@ locations_coords = {
     "lacanau": {"lat": 45.0047, "lon": -1.2039},
     "anglet": {"lat": 43.4830, "lon": -1.5450},
     "lormont": {"lat": 44.8600, "lon": -0.5330},
+    "lahume": {"lat": 44.6335, "lon": -1.0825},
+    "cazaux": {"lat": 44.4989, "lon": -1.1267},
+    "arcachon": {"lat": 44.6583, "lon": -1.1700},
+    "biscarosse": {"lat": 44.4365, "lon": -1.2514},
 }
+
 
 def format_date_ddmmyyyy(date_str):
     dt = datetime.datetime.strptime(date_str, "%Y-%m-%d")
@@ -118,7 +123,10 @@ def get_openmeteo_forecast(lat, lon):
 
 def get_gfs_forecast(lat, lon):
     try:
+        print("[DEBUG] Appel GFS pour lat=", lat, "lon=", lon)
         cat = TDSCatalog('http://thredds.ucar.edu/thredds/catalog/grib/NCEP/GFS/Global_0p25deg/catalog.xml')
+        print("[DEBUG] Catalogue GFS chargé")
+
         best_ds = list(cat.datasets.values())[0]
         ncss = best_ds.subset()
 
@@ -136,6 +144,8 @@ def get_gfs_forecast(lat, lon):
         u = response['ucomponent_of_wind_height_above_ground'].squeeze()
         v = response['vcomponent_of_wind_height_above_ground'].squeeze()
 
+        print("[DEBUG] Points reçus GFS:", u.shape)
+
         if u.ndim < 1 or u.size == 0:
             print("[WARN] Données GFS vides")
             return None
@@ -149,11 +159,13 @@ def get_gfs_forecast(lat, lon):
             time_dt = str(times[i])
             time_strs.append(time_dt)
 
+        print("[DEBUG] GFS OK avec", len(speeds), "points.")
         return {"forecast_time": time_strs, "wind_speed": speeds, "wind_direction": directions}
 
     except Exception as e:
         print(f"[EXCEPTION] GFS : {e}")
         return None
+
     
 
 def build_grouped_openmeteo_data(openmeteo_data):
