@@ -442,7 +442,7 @@ def dashboard():
 
 
 
-        target_hours = {"10h": 10, "14h": 14, "18h": 18}
+        target_hours = {"8h": 8, "11h": 11, "14h": 14, "17h": 17, "20h": 20}
 
         for label, target_hour in target_hours.items():
             closest_entry = None
