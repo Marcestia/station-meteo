@@ -87,6 +87,12 @@
   <header>
     <h1>Météo {{ selected_location|capitalize }}</h1>
   </header>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 
   <div class="card" style="background-color: #eef6fb;">
     <h2 style="text-align:center; margin-top: 0;">🔧 Paramètres</h2>
@@ -147,14 +153,13 @@
     <div>
       <h3 style="margin: 10px 0; text-align:center;">🕘 {{ bulletin_date_label }}</h3>
       <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;">
-        {% for item in daily_bulletin if item.hour in ["08:00", "11:00", "14:00", "17:00", "20:00"] %}
+        {% for item in daily_bulletin %}
           <div style="text-align:center; width: 60px;">
-            <div style="font-size: 1.5rem;">{{ item.icon }}</div>
+            <div style="font-size: 1.4rem;">{{ item.icon }}</div>
             <div><strong>{{ item.hour }}</strong></div>
             <div>{{ item.temp }}</div>
           </div>
         {% endfor %}
-
       </div>
     </div>
   </div>
@@ -170,6 +175,107 @@
       <p style="text-align:center;">Aucune donnée ESP32 reçue pour l'instant.</p>
     {% endif %}
   </div>
+
+  {% if grouped_surf_forecast %}
+    <div class="card">
+      <h2>🌊 Prévisions de Houle (Storm Glass)</h2>
+      <table>
+        <tr>
+          <th style="width: 60px;">Heure</th>
+          <th>Houle</th>
+          <th>💨 Vent</th>
+          <th>🌊 Vagues</th>
+        </tr>
+
+        {% for date, data in grouped_surf_forecast.items() %}
+          <tr style="background:#eef6fb; font-weight:bold;">
+            <td colspan="4">
+              {{ data.label|capitalize }}
+
+              {% set tide_list = tides_by_day[date] if tides_by_day and tides_by_day[date] is defined else [] %}
+
+              {% if tide_list %}
+                <div style="font-weight: normal; font-size: 0.85rem; margin-top: 4px;">
+                  {% for tide in tide_list %}
+                    {{ tide.time }} - {{ tide.height|round(1) }} m
+                    ({{ '🔺' if tide.type == 'high' else '🔻' }})
+                    {% if not loop.last %} | {% endif %}
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </td>
+          </tr>
+
+          {% for entry in data.entries %}
+            <tr>
+              <td style="font-size: 0.85rem;">{{ entry.time }}</td>
+
+              <td style="line-height: 1.4;">
+                <strong>🌊 {{ entry.height|round(1) }} m</strong>
+                <span class="wind-arrow" style="transform: rotate({{ entry.direction|round(0) }}deg); display:inline-block; margin-left: 4px;">↑</span><br>
+                ⏱ {{ entry.period|round(0) }} s<br>
+                🌡 
+                {% if entry.water_temp is not none %}
+                  {{ entry.water_temp|round(1) }} °C
+                {% else %}
+                  N/A
+                {% endif %}
+              </td>
+
+              <td>
+                {% if entry.wind_speed is not none %}
+                  {{ (entry.wind_speed * 1.94384)|round(1) }} nds
+                  {% if entry.wind_dir is not none %}
+                    <span class="wind-arrow" style="margin-left: 5px; transform: rotate({{ entry.wind_dir|round(0) }}deg);">↑</span>
+                  {% endif %}
+                {% else %}
+                  N/A
+                {% endif %}
+              </td>
+
+              {% set score = entry.surf_score %}
+              {% set bg_color = "#ffffff" %}
+              {% if score.emoji == "🏄‍♂️" %}
+                {% set bg_color = "#d8fdd8" %}
+              {% elif score.emoji == "👌" %}
+                {% set bg_color = "#fff7d4" %}
+              {% elif score.emoji == "❌" %}
+                {% set bg_color = "#ffe0e0" %}
+              {% endif %}
+
+              <td style="line-height: 1.4; background-color: {{ entry.surf_score.bg_color if entry.surf_score is defined else '#f0f0f0' }};">
+                <div style="display: flex;  align-items: center;">
+                  <div style="text-align: center; width: 100%;">
+                    {% if entry.wave_height is defined and entry.wave_height is not none %}
+                      🌊 {{ entry.wave_height|round(1) }} m<br>
+                    {% else %}
+                      N/A<br>
+                    {% endif %}
+                    {% if entry.wave_period is defined and entry.wave_period is not none %}
+                      ⏱ {{ entry.wave_period|round(0) }} s
+                    {% endif %}
+                  </div>
+
+                  <div style="font-size: 1.3rem;">
+                    {% if entry.surf_score is defined %}
+                      {{ entry.surf_score.emoji }}
+                    {% else %}
+                      ❓
+                    {% endif %}
+                  </div>
+                </div>
+              </td>
+
+
+            </tr>
+          {% endfor %}
+        {% endfor %}
+      </table>
+    </div>
+  {% endif %}
+
+
+
 
 
 
@@ -222,5 +328,9 @@
 
   <p class="refresh-note">Actualisation automatique toutes les 60s</p>
   <meta http-equiv="refresh" content="60">
+ 
+  
+
+
 </body>
 </html>

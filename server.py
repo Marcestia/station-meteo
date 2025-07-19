@@ -18,7 +18,7 @@ locations_coords = {
     "libourne": {"lat": 44.9183, "lon": -0.2417},
     "saintciers": {"lat": 45.0167, "lon": -0.2333},
     "lacanau": {"lat": 45.0047, "lon": -1.2039},
-    "anglet": {"lat": 43.4830, "lon": -1.5450},
+    "anglet": {"lat": 43.4978, "lon": -1.5260},
     "lormont": {"lat": 44.8600, "lon": -0.5330},
     "lahume": {"lat": 44.6335, "lon": -1.0825},
     "cazaux": {"lat": 44.4989, "lon": -1.1267},
@@ -330,6 +330,80 @@ def post_data():
 
 
 
+def get_surf_score(entry):
+    """
+    Retourne un score ou un emoji en fonction de la qualité des conditions de surf.
+    """
+    height = entry.get("height", 0)            # swell
+    period = entry.get("period", 0)            # swell period
+    wind_speed = entry.get("wind_speed", 0)
+    wind_dir = entry.get("wind_dir", 0)
+    wave_height = entry.get("wave_height", 0)  # total wave height
+
+    # Convertir le vent en nœuds
+    wind_speed_nds = wind_speed * 1.94384
+
+    score = 0
+    comments = []
+
+    # Hauteur de houle
+    if height < 0.6:
+        comments.append("🌊 Trop petit")
+    elif 0.6 <= height <= 1.2:
+        score += 1
+        comments.append("👍 Bonne taille")
+    else:
+        score += 2
+        comments.append("💥 Puissant")
+
+    # Période
+    if period >= 10:
+        score += 2
+        comments.append("🔁 Longue période")
+    elif 7 <= period < 10:
+        score += 1
+        comments.append("🌀 Moyenne période")
+    else:
+        comments.append("⏱ Courte période")
+
+    # Vent (onshore fort)
+    if wind_speed_nds > 6 and 270 <= wind_dir <= 360:
+        comments.append("💨 Onshore fort")
+
+    elif wind_speed_nds < 6 and 90 <= wind_dir <= 150:
+        score += 1
+        comments.append("🍃 Off/Side-off léger")
+
+    elif 180 <= wind_dir <= 250:
+        score += 0.5
+        comments.append("↔️ Side-shore tolérable")
+
+    # 🌊 Total Wave Height trop gros
+    if wave_height and wave_height > 1.8:
+        score -= 1
+        comments.append("🌊 Trop gros")
+
+    # 💨 Vent trop fort onshore
+    if wind_speed_nds > 10 and 270 <= wind_dir <= 360:
+        score -= 1
+        comments.append("💨 Vent défavorable")
+
+    # Notation finale par emoji et couleur
+    if score >= 4:
+        emoji = "🏄‍♂️"
+        bg_color = "#d4edda"  # vert clair
+    elif 2 <= score < 4:
+        emoji = "👌"
+        bg_color = "#fff3cd"  # jaune pâle
+    else:
+        emoji = "❌"
+        bg_color = "#f8d7da"  # rouge clair
+
+    return {
+        "score": score,
+        "emoji": emoji,
+        "bg_color": bg_color
+    }
 
 
 
@@ -339,6 +413,19 @@ def dashboard():
     location_key = request.args.get("location", "libourne")
     selected_model = request.args.get("model", "openmeteo")
     coords = locations_coords.get(location_key, locations_coords["libourne"])
+    all_surf_data = get_cached_stormglass_forecast()
+    surf_forecast = all_surf_data.get(location_key, [])
+
+    surf_forecast_filtered = []
+    if surf_forecast:
+        surf_forecast_filtered = [
+            item for item in surf_forecast
+            if item.get("time", "")[11:13] in ["08", "11", "14", "17"]
+        ]
+
+
+    print("[DEBUG] StormGlass surf data:", surf_forecast[:3])  # debug
+
 
     gfs_forecast = get_gfs_forecast(coords["lat"], coords["lon"])
     meteostat_forecast = get_meteostat_forecast(coords["lat"], coords["lon"])
@@ -442,7 +529,7 @@ def dashboard():
 
 
 
-        target_hours = {"8h": 8, "11h": 11, "14h": 14, "17h": 17, "20h": 20}
+        target_hours = {"11h": 11, "14h": 14, "17h": 17, "20h": 20}
 
         for label, target_hour in target_hours.items():
             closest_entry = None
@@ -482,6 +569,44 @@ def dashboard():
                     "icon": icon
                 })
 
+    
+
+    def group_surf_forecast_by_day(surf_data):
+        grouped = {}
+
+        for item in surf_data:
+            dt = datetime.datetime.fromisoformat(item["time"].replace("Z", "+00:00"))
+            date_key = dt.strftime("%Y-%m-%d")  # clef interne
+            day_label = dt.strftime("%a")       # lun, mar...
+            hour_str = dt.strftime("%H:%M")
+            
+
+            if date_key not in grouped:
+                grouped[date_key] = {
+                    "label": day_label,
+                    "entries": []
+                }
+
+            grouped[date_key]["entries"].append({
+                "time": hour_str,
+                "height": item["height"],
+                "period": item["period"],
+                "direction": item["direction"],
+                "water_temp": item["water_temp"],
+                "wind_speed": item["wind_speed"],
+                "wind_dir": item["wind_dir"],
+                "sea_level": item.get("sea_level"),
+                "wave_height": item.get("wave_height"),
+                "wave_period": item.get("wave_period"),
+                "surf_score": get_surf_score(item)  # ← AJOUT ICI
+                
+                
+            })
+
+        return grouped
+
+
+    grouped_surf_forecast = group_surf_forecast_by_day(surf_forecast_filtered)
 
 
 
@@ -499,8 +624,115 @@ def dashboard():
                        current_wind_direction=current_wind_direction,
                        current_date=current_date, 
                        daily_bulletin=daily_bulletin,
-                       bulletin_date_label=bulletin_date_label
+                       bulletin_date_label=bulletin_date_label,
+                       surf_forecast=surf_forecast or [],
+                       grouped_surf_forecast=grouped_surf_forecast,
+                       locations_coords=locations_coords  # ← ajoute cette ligne !
                        )
+
+cached_surf_data = {"timestamp": None, "data": None}
+import os
+import json
+
+@app.template_filter('datetimeformat')
+def datetimeformat(value, format='%d/%m/%Y'):
+    return datetime.datetime.fromisoformat(value).strftime(format)
+
+CACHE_FILE = "stormglass_cache.json"
+
+def fetch_stormglass_data(lat, lon):
+    try:
+        now = datetime.datetime.utcnow()
+        end = now + datetime.timedelta(days=7)
+
+        api_key = "8396cbf4-634d-11f0-80b9-0242ac130006-8396cd02-634d-11f0-80b9-0242ac130006"
+        headers = { "Authorization": api_key }
+
+        url = (
+            f"https://api.stormglass.io/v2/weather/point"
+            f"?lat={lat}&lng={lon}"
+            f"&params=swellHeight,swellDirection,swellPeriod,waterTemperature,"
+            f"windSpeed,windDirection,seaLevel,waveHeight,wavePeriod"
+            f"&start={int(now.timestamp())}"
+            f"&end={int(end.timestamp())}"
+            # f"&source=noaa"  # optionnel : tu peux commenter pour tester les autres sources
+        )
+
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+
+        results = []
+        for entry in data.get("hours", []):
+            time = entry.get("time")
+            height = entry.get("swellHeight", {}).get("noaa")
+            direction = entry.get("swellDirection", {}).get("noaa")
+            period = entry.get("swellPeriod", {}).get("noaa")
+            water_temp = entry.get("waterTemperature", {}).get("noaa")
+            wind_speed = entry.get("windSpeed", {}).get("noaa")
+            wind_dir = entry.get("windDirection", {}).get("noaa")
+            sea_level = entry.get("seaLevel", {}).get("noaa")
+            wave_height = entry.get("waveHeight", {}).get("noaa")
+            wave_period = entry.get("wavePeriod", {}).get("noaa")
+
+            # On vérifie les données critiques pour afficher une prévision
+            if None not in (height, direction, period):
+                results.append({
+                    "time": time,
+                    "height": height,
+                    "direction": (direction + 180) % 360,
+                    "period": period,
+                    "water_temp": water_temp,
+                    "wind_speed": wind_speed,
+                    "wind_dir": (wind_dir + 180) % 360 if wind_dir is not None else None,
+                    "sea_level": sea_level,
+                    "wave_height": wave_height,
+                    "wave_period": wave_period
+                })
+
+        return results
+
+    except Exception as e:
+        print(f"[StormGlass ERROR] {e}")
+        return []
+
+
+
+def get_cached_stormglass_forecast():
+    now = datetime.datetime.utcnow()
+
+    # Lire le cache s'il existe
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, "r") as f:
+                cached = json.load(f)
+                timestamp_str = cached.get("timestamp", None)
+                if timestamp_str:
+                    timestamp = datetime.datetime.fromisoformat(timestamp_str)
+                    if (now - timestamp).total_seconds() <  5*3600:
+                        return cached.get("data", {})
+        except Exception as e:
+            print(f"[CACHE READ ERROR] stormglass_cache.json: {e}")
+
+    # Si cache invalide ou inexistant, appeler l'API pour les spots ciblés
+    data = {}
+    for loc_key in ["anglet", "lacanau"]:
+        coords = locations_coords[loc_key]
+        print(f"[INFO] Requête StormGlass pour {loc_key}")
+        data[loc_key] = fetch_stormglass_data(coords["lat"], coords["lon"])
+
+    try:
+        with open(CACHE_FILE, "w") as f:
+            json.dump({
+                "timestamp": now.isoformat(),
+                "data": data
+            }, f)
+    except Exception as e:
+        print(f"[CACHE WRITE ERROR] stormglass_cache.json: {e}")
+
+    return data
+
+
 
 
 
