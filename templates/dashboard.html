@@ -243,28 +243,14 @@
                 {% set bg_color = "#ffe0e0" %}
               {% endif %}
 
-              <td style="line-height: 1.4; background-color: {{ entry.surf_score.bg_color if entry.surf_score is defined else '#f0f0f0' }};">
-                <div style="display: flex;  align-items: center;">
-                  <div style="text-align: center; width: 100%;">
-                    {% if entry.wave_height is defined and entry.wave_height is not none %}
-                      🌊 {{ entry.wave_height|round(1) }} m<br>
-                    {% else %}
-                      N/A<br>
-                    {% endif %}
-                    {% if entry.wave_period is defined and entry.wave_period is not none %}
-                      ⏱ {{ entry.wave_period|round(0) }} s
-                    {% endif %}
-                  </div>
-
-                  <div style="font-size: 1.3rem;">
-                    {% if entry.surf_score is defined %}
-                      {{ entry.surf_score.emoji }}
-                    {% else %}
-                      ❓
-                    {% endif %}
-                  </div>
-                </div>
+              <td style="background-color: {{ entry.surf_score.bg_color if entry.surf_score is defined else '#f0f0f0' }}; font-size: 1.3rem; text-align: center;">
+                {% if entry.surf_score is defined %}
+                  {{ entry.surf_score.emoji }}
+                {% else %}
+                  ❓
+                {% endif %}
               </td>
+
 
 
             </tr>
