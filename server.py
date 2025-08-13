@@ -411,42 +411,32 @@ def get_surf_score(entry):
 @app.route('/')
 def dashboard():
     location_key = request.args.get("location", "libourne")
-    selected_model = request.args.get("model", "openmeteo")
     coords = locations_coords.get(location_key, locations_coords["libourne"])
+
+    # ---- Prévisions Surf (StormGlass avec cache) ----
     all_surf_data = get_cached_stormglass_forecast()
     surf_forecast = all_surf_data.get(location_key, [])
 
-    surf_forecast_filtered = []
-    if surf_forecast:
-        surf_forecast_filtered = [
-            item for item in surf_forecast
-            if item.get("time", "")[11:13] in ["08", "11", "14", "17"]
-        ]
-
+    # Filtrer pour n'afficher que certaines heures
+    surf_forecast_filtered = [
+        item for item in surf_forecast
+        if item.get("time", "")[11:13] in ["08", "11", "14", "17", "20"]
+    ] if surf_forecast else []
 
     print("[DEBUG] StormGlass surf data:", surf_forecast[:3])  # debug
 
-
+    # ---- Prévisions météo/vent ----
     gfs_forecast = get_gfs_forecast(coords["lat"], coords["lon"])
     meteostat_forecast = get_meteostat_forecast(coords["lat"], coords["lon"])
     openmeteo_forecast = get_openmeteo_forecast(coords["lat"], coords["lon"])
 
     grouped_avg = {}
 
-    if selected_model == "gfs" and gfs_forecast:
-        model_data = gfs_forecast
-        grouped_avg = build_grouped_gfs_data(model_data)
-
-    elif selected_model == "meteostat" and meteostat_forecast:
-        model_data = meteostat_forecast
-        grouped_avg = build_grouped_meteostat_data(model_data)
-    elif selected_model == "openmeteo" and openmeteo_forecast:
-        model_data = openmeteo_forecast
-        grouped_avg = build_grouped_openmeteo_data(model_data)
-    
-    elif selected_model == "avg" and gfs_forecast and meteostat_forecast:
+    # Calcul vent : priorité à la moyenne GFS + Meteostat
+    if gfs_forecast and meteostat_forecast:
         model_data = {"forecast_time": [], "wind_speed": [], "wind_direction": []}
         common_times = sorted(set(gfs_forecast["forecast_time"]) & set(meteostat_forecast["forecast_time"]))
+
         for t in common_times:
             idx_gfs = gfs_forecast["forecast_time"].index(t)
             idx_meteo = meteostat_forecast["forecast_time"].index(t)
@@ -459,6 +449,7 @@ def dashboard():
             if None in [ws_gfs, ws_meteo, wd_gfs, wd_meteo]:
                 continue
 
+            # Moyenne pondérée (60% GFS, 40% Meteostat)
             avg_speed = 0.6 * ws_gfs + 0.4 * ws_meteo
             sin_sum = 0.6 * math.sin(math.radians(wd_gfs)) + 0.4 * math.sin(math.radians(wd_meteo))
             cos_sum = 0.6 * math.cos(math.radians(wd_gfs)) + 0.4 * math.cos(math.radians(wd_meteo))
@@ -468,26 +459,34 @@ def dashboard():
             model_data["wind_speed"].append(avg_speed)
             model_data["wind_direction"].append(avg_dir)
 
-        if model_data:
-            for i in range(len(model_data["forecast_time"])):
-                t = model_data["forecast_time"][i]
-                date_part, time_part = t.split("T")
-                time_part = time_part.replace("Z", "")
-                formatted_date = format_date_ddmmyyyy(date_part)
-                if formatted_date not in grouped_avg:
-                    grouped_avg[formatted_date] = []
-                grouped_avg[formatted_date].append({
-                    "time": time_part,
-                    "speed": model_data["wind_speed"][i],
-                    "direction": model_data["wind_direction"][i]
-                })
+        for i, t in enumerate(model_data["forecast_time"]):
+            date_part, time_part = t.split("T")
+            time_part = time_part.replace("Z", "")
+            formatted_date = format_date_ddmmyyyy(date_part)
+            if formatted_date not in grouped_avg:
+                grouped_avg[formatted_date] = []
+            grouped_avg[formatted_date].append({
+                "time": time_part,
+                "speed": model_data["wind_speed"][i],
+                "direction": model_data["wind_direction"][i]
+            })
+
+    elif gfs_forecast:
+        grouped_avg = build_grouped_gfs_data(gfs_forecast)
+
+    elif meteostat_forecast:
+        grouped_avg = build_grouped_meteostat_data(meteostat_forecast)
+
+    elif openmeteo_forecast:
+        grouped_avg = build_grouped_openmeteo_data(openmeteo_forecast)
+
+    # ---- Météo actuelle ----
     current_temperature = None
     current_cloud_cover = None
     current_precipitation = None
     current_date = datetime.datetime.utcnow().strftime("%d/%m/%Y")
 
     if openmeteo_forecast and openmeteo_forecast.get("temperature"):
-        # Protéger contre dépassement d'index
         idx_temp = 1 if len(openmeteo_forecast["temperature"]) > 1 else 0
         current_temperature = openmeteo_forecast["temperature"][idx_temp]
         current_cloud_cover = openmeteo_forecast["cloud_cover"][0]
@@ -496,30 +495,19 @@ def dashboard():
     current_wind_speed = None
     current_wind_direction = None
 
-    current_wind_speed = None
-    current_wind_direction = None
-
     if gfs_forecast and gfs_forecast.get("forecast_time"):
-        # Prendre la première prévision GFS comme "actuel"
         current_wind_speed = gfs_forecast["wind_speed"][0]
         current_wind_direction = gfs_forecast["wind_direction"][0]
 
+    # ---- Bulletin météo simplifié ----
     daily_bulletin = []
+    bulletin_date_label = ""
 
     if openmeteo_forecast and openmeteo_forecast.get("forecast_time"):
-        today = datetime.datetime.utcnow().date()
         now_utc = datetime.datetime.utcnow()
         today = now_utc.date()
 
-        # Si heure actuelle UTC > 18h00, bascule sur le lendemain
-        if now_utc.hour >= 18:
-            target_date = today + datetime.timedelta(days=1)
-        else:
-            target_date = today
-
-        now_utc = datetime.datetime.utcnow()
-        today = now_utc.date()
-
+        # Déterminer jour cible
         if now_utc.hour >= 18:
             target_date = today + datetime.timedelta(days=1)
             bulletin_date_label = f"BULLETIN POUR DEMAIN ({target_date.strftime('%d/%m/%Y')})"
@@ -527,9 +515,7 @@ def dashboard():
             target_date = today
             bulletin_date_label = f"BULLETIN POUR AUJOURD’HUI ({target_date.strftime('%d/%m/%Y')})"
 
-
-
-        target_hours = {"11h": 11, "14h": 14, "17h": 17, "20h": 20}
+        target_hours = {"8h": 8,"11h": 11, "14h": 14, "17h": 17, "20h": 20,"23h": 23}
 
         for label, target_hour in target_hours.items():
             closest_entry = None
@@ -543,7 +529,6 @@ def dashboard():
             ):
                 dt = parse_openmeteo_time(t)
                 if dt.date() != target_date:
-
                     continue
 
                 time_diff = abs((dt - dt.replace(hour=target_hour, minute=0, second=0)).total_seconds())
@@ -569,17 +554,14 @@ def dashboard():
                     "icon": icon
                 })
 
-    
-
+    # ---- Groupement surf ----
     def group_surf_forecast_by_day(surf_data):
         grouped = {}
-
         for item in surf_data:
             dt = datetime.datetime.fromisoformat(item["time"].replace("Z", "+00:00"))
-            date_key = dt.strftime("%Y-%m-%d")  # clef interne
-            day_label = dt.strftime("%a")       # lun, mar...
+            date_key = dt.strftime("%Y-%m-%d")
+            day_label = dt.strftime("%a")
             hour_str = dt.strftime("%H:%M")
-            
 
             if date_key not in grouped:
                 grouped[date_key] = {
@@ -598,37 +580,55 @@ def dashboard():
                 "sea_level": item.get("sea_level"),
                 "wave_height": item.get("wave_height"),
                 "wave_period": item.get("wave_period"),
-                "surf_score": get_surf_score(item)  # ← AJOUT ICI
-                
-                
+                "surf_score": get_surf_score(item)
             })
 
         return grouped
 
-
     grouped_surf_forecast = group_surf_forecast_by_day(surf_forecast_filtered)
 
-
+    # ---- Webcams par location ----
+    webcams_by_location = {
+        "anglet": [
+            {"name": "Plage de Marinella", "iframe": "https://gosurf.fr/webcam/fr/153/Anglet-Plage-de-Marinella-Sables-d-Or"},
+            {"name": "Plage du Club", "iframe": "https://gosurf.fr/webcam/fr/149/Anglet-Plage-du-Club"},
+            {"name": "Madrague Océan Dunes", "iframe": "https://gosurf.fr/webcam/fr/58/Anglet-Madrague-Ocean-Dunes"},
+            {"name": "Plage de la Barre", "iframe": "https://gosurf.fr/webcam/fr/150/Anglet-Plage-de-la-Barre"}
+        ],
+        "lacanau": [
+            {"name": "Plage Centrale", "iframe": "https://ds2-cache.quanteec.com/contents/encodings/live/67eb6464-055f-47cb-3730-3330-6d61-63-abc5-fa5259757cc4d/media_0.m3u8"}
+        ],
+        "biscarosse": [
+            {"name": "Biscarrosse Plage", "iframe": "https://gosurf.fr/webcam/fr/14/Biscarrosse"}
+        ],
+        "arcachon": [
+            {"name": "Arcachon", "iframe": "https://gosurf.fr/webcam/fr/15/Arcachon"}
+        ]
+    }
+    webcams = webcams_by_location.get(location_key, [])
 
     return render_template("dashboard.html",
-                       temperature=latest_data['temperature'],
-                       humidity=latest_data['humidity'],
-                       timestamp=latest_data['timestamp'],
-                       selected_location=location_key,
-                       selected_model=selected_model,
-                       grouped_avg=grouped_avg,
-                       current_temperature=current_temperature,
-                       current_cloud_cover=current_cloud_cover,
-                       current_precipitation=current_precipitation,
-                       current_wind_speed=current_wind_speed,
-                       current_wind_direction=current_wind_direction,
-                       current_date=current_date, 
-                       daily_bulletin=daily_bulletin,
-                       bulletin_date_label=bulletin_date_label,
-                       surf_forecast=surf_forecast or [],
-                       grouped_surf_forecast=grouped_surf_forecast,
-                       locations_coords=locations_coords  # ← ajoute cette ligne !
-                       )
+        temperature=latest_data['temperature'],
+        humidity=latest_data['humidity'],
+        timestamp=latest_data['timestamp'],
+        selected_location=location_key,
+        grouped_avg=grouped_avg,
+        current_temperature=current_temperature,
+        current_cloud_cover=current_cloud_cover,
+        current_precipitation=current_precipitation,
+        current_wind_speed=current_wind_speed,
+        current_wind_direction=current_wind_direction,
+        current_date=current_date,
+        daily_bulletin=daily_bulletin,
+        bulletin_date_label=bulletin_date_label,
+        surf_forecast=surf_forecast or [],
+        grouped_surf_forecast=grouped_surf_forecast,
+        locations_coords=locations_coords,
+        webcams=webcams,
+        meteostat_forecast=meteostat_forecast ,
+        openmeteo_forecast=openmeteo_forecast  # ✅ AJOUT IMPORTANT
+    )
+
 
 cached_surf_data = {"timestamp": None, "data": None}
 import os

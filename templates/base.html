@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Dashboard Météo{% endblock %}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="header-left">
+      <div class="earth-container">
+        <img src="{{ url_for('static', filename='images/earth.png') }}" alt="Earth" class="earth">
+      </div>
+      <h1 class="header-title">Dashboard Météo</h1>
+    </div>
+    <button id="darkModeToggle" class="btn-secondary">🌙 Mode sombre</button>
+  </header>
+
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <p>&copy; 2025 Dashboard Météo</p>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const forecastData = {{ grouped_avg|tojson|safe }};
+    const selectedLocation = "{{ selected_location }}";
+    const selectedModel = "{{ selected_model }}";
+    const coords = {{ locations_coords|tojson|safe }}[selectedLocation];
+    const locationsData = {{ locations_coords|tojson|safe }};
+    const bulletinData = {{ daily_bulletin|tojson|safe }};
+  </script>
+
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
