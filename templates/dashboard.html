@@ -82,6 +82,7 @@
         <h3>{{ surf_snapshot.headline }}</h3>
         <p class="muted">Eau {{ surf_snapshot.water_temp if surf_snapshot.water_temp else '—' }}°C • meilleures fenêtres à surveiller</p>
       </div>
+      <span class="chip ghost">Source {{ surf_source|replace('-', ' ') }}</span>
     </div>
     <div class="surf-grid">
       {% for w in surf_snapshot.next_windows %}

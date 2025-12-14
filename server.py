@@ -35,15 +35,6 @@ def format_date_ddmmyyyy(date_str):
     return dt.strftime("%d/%m/%Y")
 
 def parse_openmeteo_time(t_str):
-    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%MZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M"):
-        try:
-            return datetime.datetime.strptime(t_str, fmt)
-        except ValueError:
-            continue
-    raise ValueError(f"Format de date/heure Open-Meteo inattendu : {t_str}")
-
-
-def parse_openmeteo_time(t_str):
     # Harmoniser : si pas de "Z", l'ajouter (comme Open-Meteo le ferait)
     if not t_str.endswith("Z"):
         t_str += "Z"
@@ -416,7 +407,14 @@ def dashboard():
 
     # ---- Prévisions Surf (StormGlass avec cache) ----
     all_surf_data = get_cached_stormglass_forecast()
-    surf_forecast = all_surf_data.get(location_key, [])
+    surf_data_for_location = all_surf_data.get(location_key, {}) if isinstance(all_surf_data, dict) else {}
+
+    if isinstance(surf_data_for_location, dict):
+        surf_forecast = surf_data_for_location.get("entries", [])
+        surf_source = surf_data_for_location.get("source", "stormglass")
+    else:
+        surf_forecast = surf_data_for_location or []
+        surf_source = "stormglass"
 
     # Filtrer pour n'afficher que certaines heures
     surf_forecast_filtered = [
@@ -679,6 +677,7 @@ def dashboard():
         webcams=webcams,
         meteostat_forecast=meteostat_forecast ,
         openmeteo_forecast=openmeteo_forecast,
+        surf_source=surf_source,
     )
 
 
@@ -695,8 +694,12 @@ def fetch_stormglass_data(lat, lon):
         now = datetime.datetime.utcnow()
         end = now + datetime.timedelta(days=7)
 
-        api_key = "8396cbf4-634d-11f0-80b9-0242ac130006-8396cd02-634d-11f0-80b9-0242ac130006"
-        headers = { "Authorization": api_key }
+        api_key = os.environ.get("STORMGLASS_API_KEY", "8396cbf4-634d-11f0-80b9-0242ac130006-8396cd02-634d-11f0-80b9-0242ac130006")
+        if not api_key:
+            print("[StormGlass WARN] API key absente : définir STORMGLASS_API_KEY")
+            return []
+
+        headers = {"Authorization": api_key}
 
         url = (
             f"https://api.stormglass.io/v2/weather/point"
@@ -708,7 +711,7 @@ def fetch_stormglass_data(lat, lon):
             # f"&source=noaa"  # optionnel : tu peux commenter pour tester les autres sources
         )
 
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=12)
         response.raise_for_status()
         data = response.json()
 
@@ -747,36 +750,104 @@ def fetch_stormglass_data(lat, lon):
         return []
 
 
+def fetch_openmeteo_marine_data(lat, lon):
+    """Fallback gratuit : API marine Open-Meteo pour récupérer houle et vent."""
+    try:
+        url = (
+            "https://marine-api.open-meteo.com/v1/marine"
+            f"?latitude={lat}&longitude={lon}"
+            "&hourly=wave_height,wave_direction,wave_period,wind_wave_height,wind_wave_direction,wind_wave_period,sea_surface_temperature,wind_speed_10m,wind_direction_10m"
+            "&timezone=UTC"
+        )
+        resp = requests.get(url, timeout=12)
+        resp.raise_for_status()
+        payload = resp.json()
+        hourly = payload.get("hourly", {})
+        times = hourly.get("time", [])
+
+        def idx(key, i):
+            arr = hourly.get(key, [])
+            try:
+                return arr[i]
+            except Exception:
+                return None
+
+        results = []
+        for i, t in enumerate(times):
+            height = idx("wave_height", i)
+            period = idx("wave_period", i)
+            direction = idx("wave_direction", i)
+            wind_speed = idx("wind_speed_10m", i)
+            wind_dir = idx("wind_direction_10m", i)
+            water_temp = idx("sea_surface_temperature", i)
+            sea_level = None  # non fourni par Open-Meteo Marine
+            wave_height = idx("wind_wave_height", i)
+            wave_period = idx("wind_wave_period", i)
+
+            if height is None or period is None:
+                continue
+
+            results.append(
+                {
+                    "time": t,
+                    "height": height,
+                    "direction": direction,
+                    "period": period,
+                    "water_temp": water_temp,
+                    "wind_speed": wind_speed,
+                    "wind_dir": wind_dir,
+                    "sea_level": sea_level,
+                    "wave_height": wave_height,
+                    "wave_period": wave_period,
+                }
+            )
+
+        return results
+    except Exception as e:
+        print(f"[Marine Fallback ERROR] {e}")
+        return []
+
+
 
 def get_cached_stormglass_forecast():
     now = datetime.datetime.utcnow()
 
-    # Lire le cache s'il existe
+    cached_data = None
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, "r") as f:
                 cached = json.load(f)
                 timestamp_str = cached.get("timestamp", None)
+                cached_data = cached.get("data", {})
                 if timestamp_str:
                     timestamp = datetime.datetime.fromisoformat(timestamp_str)
-                    if (now - timestamp).total_seconds() <  5*3600:
-                        return cached.get("data", {})
+                    if (now - timestamp).total_seconds() < 5 * 3600:
+                        return cached_data
         except Exception as e:
             print(f"[CACHE READ ERROR] stormglass_cache.json: {e}")
 
-    # Si cache invalide ou inexistant, appeler l'API pour les spots ciblés
     data = {}
     for loc_key in ["anglet", "lacanau"]:
         coords = locations_coords[loc_key]
         print(f"[INFO] Requête StormGlass pour {loc_key}")
-        data[loc_key] = fetch_stormglass_data(coords["lat"], coords["lon"])
+        entries = fetch_stormglass_data(coords["lat"], coords["lon"])
+        source = "stormglass"
+
+        if not entries:
+            print(f"[WARN] StormGlass vide pour {loc_key}, fallback Open-Meteo Marine")
+            entries = fetch_openmeteo_marine_data(coords["lat"], coords["lon"])
+            source = "open-meteo-marine" if entries else "indisponible"
+
+        data[loc_key] = {"entries": entries, "source": source}
+
+    # Si rien de nouveau mais cache précédent dispo, on conserve l'ancien
+    if all(not d["entries"] for d in data.values()) and cached_data:
+        print("[INFO] Données StormGlass indisponibles, réutilisation du cache précédent")
+        return cached_data
 
     try:
         with open(CACHE_FILE, "w") as f:
-            json.dump({
-                "timestamp": now.isoformat(),
-                "data": data
-            }, f)
+            json.dump({"timestamp": now.isoformat(), "data": data}, f)
     except Exception as e:
         print(f"[CACHE WRITE ERROR] stormglass_cache.json: {e}")
 
