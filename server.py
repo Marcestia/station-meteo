@@ -523,6 +523,54 @@ def dashboard():
         if item.get("time", "")[11:13] in ["08", "11", "14", "17", "20"]
     ] if surf_forecast else []
 
+    # Préparer une synthèse simple pour l'affichage (qualité, heure, température eau)
+    surf_snapshot = {
+        "headline": "Pas de donnée surf",
+        "best_entry": None,
+        "water_temp": None,
+        "next_windows": [],
+    }
+
+    if surf_forecast_filtered:
+        temps = [x.get("water_temp") for x in surf_forecast_filtered if x.get("water_temp") is not None]
+        surf_snapshot["water_temp"] = round(sum(temps) / len(temps), 1) if temps else None
+
+        # Annoter chaque entrée avec un score pour réutilisation côté template
+        for entry in surf_forecast_filtered:
+            entry["surf_score"] = get_surf_score(entry)
+
+        best_entry = max(
+            surf_forecast_filtered,
+            key=lambda x: (x["surf_score"]["score"], x.get("period", 0)),
+        )
+
+        def _format_dt(item):
+            dt = datetime.datetime.fromisoformat(item["time"].replace("Z", "+00:00"))
+            return dt.strftime("%a %Hh")
+
+        surf_snapshot["headline"] = f"{best_entry.get('height', 0):.1f} m @ {best_entry.get('period', 0):.0f}s — {best_entry['surf_score']['emoji']}"
+        surf_snapshot["best_entry"] = {
+            "label": _format_dt(best_entry),
+            "wind": best_entry.get("wind_speed"),
+            "wind_dir": best_entry.get("wind_dir"),
+            "period": best_entry.get("period"),
+            "height": best_entry.get("height"),
+            "score": best_entry["surf_score"],
+            "water_temp": best_entry.get("water_temp"),
+        }
+
+        surf_snapshot["next_windows"] = [
+            {
+                "label": _format_dt(item),
+                "height": item.get("height"),
+                "period": item.get("period"),
+                "wind_speed": item.get("wind_speed"),
+                "wind_dir": item.get("wind_dir"),
+                "score": item["surf_score"],
+            }
+            for item in surf_forecast_filtered[:4]
+        ]
+
     print("[DEBUG] StormGlass surf data:", surf_forecast[:3])  # debug
 
     # ---- Prévisions météo/vent ----
@@ -669,6 +717,8 @@ def dashboard():
                     "entries": []
                 }
 
+            surf_score = item.get("surf_score") or get_surf_score(item)
+
             grouped[date_key]["entries"].append({
                 "time": hour_str,
                 "height": item["height"],
@@ -680,7 +730,7 @@ def dashboard():
                 "sea_level": item.get("sea_level"),
                 "wave_height": item.get("wave_height"),
                 "wave_period": item.get("wave_period"),
-                "surf_score": get_surf_score(item)
+                "surf_score": surf_score
             })
 
         return grouped
@@ -732,6 +782,7 @@ def dashboard():
         bulletin_date_label=bulletin_date_label,
         surf_forecast=surf_forecast or [],
         grouped_surf_forecast=grouped_surf_forecast,
+        surf_snapshot=surf_snapshot,
         locations_coords=locations_coords,
         webcams=webcams,
         meteostat_forecast=meteostat_forecast ,

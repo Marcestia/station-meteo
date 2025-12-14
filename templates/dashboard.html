@@ -27,35 +27,68 @@
   </div>
 </section>
 
-<section class="card ai-card">
-  <div class="ai-card-header">
-    <div>
-      <p class="eyebrow">Assistant IA</p>
-      <h3>{{ ai_briefing.title }}</h3>
+<div class="split-grid">
+  <section class="card surf-spotlight section-toggle visible" id="section-surf-headline">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Surf check</p>
+        <h3>{{ surf_snapshot.headline }}</h3>
+        <p class="muted">Température eau: {{ surf_snapshot.water_temp if surf_snapshot.water_temp else '—' }}°C{% if surf_snapshot.best_entry %} • Fenêtre {{ surf_snapshot.best_entry.label }}{% endif %}</p>
+      </div>
+      {% if surf_snapshot.best_entry %}
+        <span class="pill pill-success">Session à surveiller</span>
+      {% else %}
+        <span class="pill pill-warning">En attente</span>
+      {% endif %}
     </div>
-    <span class="pill {% if ai_briefing.status == 'ok' %}pill-success{% elif ai_briefing.status == 'placeholder' %}pill-muted{% else %}pill-warning{% endif %}">
-      {{ ai_briefing.provider }}
-    </span>
-  </div>
-  <div class="ai-card-body">
-    <pre>{{ ai_briefing.content }}</pre>
-  </div>
-</section>
+    <div class="surf-window-grid">
+      {% for w in surf_snapshot.next_windows %}
+        <div class="surf-window-card">
+          <div class="surf-window-top">
+            <span class="chip soft">{{ w.label }}</span>
+            <span class="surf-emoji">{{ w.score.emoji }}</span>
+          </div>
+          <div class="surf-window-body">
+            <div class="wave">🌊 {{ w.height|round(1) }} m · {{ w.period|round(0) }} s</div>
+            <div class="wind">💨 {{ (w.wind_speed * 1.94384)|round(1) if w.wind_speed else '—' }} nds · {{ w.wind_dir|round(0) if w.wind_dir else '—' }}°</div>
+          </div>
+        </div>
+      {% else %}
+        <p class="muted">Aucune fenêtre surf dans le créneau filtré.</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="card ai-card">
+    <div class="ai-card-header">
+      <div>
+        <p class="eyebrow">Assistant IA</p>
+        <h3>{{ ai_briefing.title }}</h3>
+      </div>
+      <span class="pill {% if ai_briefing.status == 'ok' %}pill-success{% elif ai_briefing.status == 'placeholder' %}pill-muted{% else %}pill-warning{% endif %}">
+        {{ ai_briefing.provider }}
+      </span>
+    </div>
+    <div class="ai-card-body">
+      <pre>{{ ai_briefing.content }}</pre>
+    </div>
+  </section>
+</div>
 
 <section class="card quick-stats section-toggle visible" id="section-weather">
   <div class="quick-grid">
     <div class="stat">
-      <p class="label">Température</p>
+      <div class="stat-label">Température</div>
       <h3>{{ current_temperature|round(1) if current_temperature is not none else 'N/A' }}°C</h3>
       <p class="muted">Couvert: {{ current_cloud_cover|default('—') }}%</p>
     </div>
     <div class="stat">
-      <p class="label">Vent</p>
+      <div class="stat-label">Vent</div>
       <h3>{{ (current_wind_speed * 1.94384)|round(1) if current_wind_speed else 'N/A' }} nds</h3>
       <p class="muted">Direction {{ current_wind_direction|round(0) if current_wind_direction else '—' }}°</p>
     </div>
     <div class="stat">
-      <p class="label">Précipitations</p>
+      <div class="stat-label">Précipitations</div>
       <h3>{{ current_precipitation|default('0') }} mm</h3>
       <p class="muted">Bulletin : {{ bulletin_date_label }}</p>
     </div>
@@ -136,12 +169,21 @@
       <div class="forecast-grid">
         {% for entry in data.entries %}
           <div class="forecast-card quality-{{ entry.surf_score.emoji }}">
-            <div class="forecast-time">{{ entry.time }}</div>
-            <div class="forecast-info">
-              <div class="wave">🌊 {{ entry.height|round(1) }} m · {{ entry.period|round(0) }} s</div>
-              <div class="wind">💨 {{ (entry.wind_speed * 1.94384)|round(1) }} nds · {{ entry.wind_dir|round(0) }}°</div>
+            <div class="forecast-card-head">
+              <div>
+                <p class="muted">{{ entry.time }}</p>
+                <strong>{{ entry.height|round(1) }} m @ {{ entry.period|round(0) }} s</strong>
+              </div>
+              <span class="pill soft">{{ entry.surf_score.emoji }}</span>
             </div>
-            <div class="surf-score">{{ entry.surf_score.emoji }}</div>
+            <div class="forecast-info">
+              <div class="metric"><span>💨</span> {{ (entry.wind_speed * 1.94384)|round(1) }} nds · {{ entry.wind_dir|round(0) }}°</div>
+              {% if entry.wave_height %}<div class="metric"><span>🌊</span> Vague totale {{ entry.wave_height|round(1) }} m</div>{% endif %}
+            </div>
+            <div class="forecast-meta">
+              {% if entry.water_temp %}<span class="chip soft">🌡 Eau {{ entry.water_temp|round(1) }}°C</span>{% endif %}
+              {% if entry.sea_level %}<span class="chip soft">🌐 Marée {{ entry.sea_level|round(2) }} m</span>{% endif %}
+            </div>
           </div>
         {% endfor %}
       </div>
@@ -259,22 +301,31 @@
 
 <section class="card section-toggle visible" id="section-webcams">
   <div class="section-heading">
-    <h2>📹 Webcams</h2>
+    <div>
+      <h2>📹 Webcams</h2>
+      <p class="muted">Rester sur l'image pour checker le line-up avant de bouger.</p>
+    </div>
     <div class="pill-row">
       <label class="pill-toggle"><input type="checkbox" id="toggle-webcams"> Visible</label>
     </div>
   </div>
-  <div class="webcam-grid">
+  <div class="webcam-carousel">
     {% for cam in webcams %}
     <div class="webcam-card" data-iframe="{{ cam.iframe }}">
-      <iframe src="{{ cam.iframe }}"
-        style="width:100%; height:250px; border:none; border-radius:8px;"
-        allowfullscreen>
-      </iframe>
+      <div class="webcam-frame">
+        <iframe src="{{ cam.iframe }}"
+          style="width:100%; height:240px; border:none; border-radius:12px;"
+          allowfullscreen></iframe>
+      </div>
       <div class="webcam-info">
-        <h3>{{ cam.name }}</h3>
-        <a href="{{ cam.iframe }}" target="_blank" class="webcam-btn">🎥 Voir en direct</a>
-        <button class="webcam-fullscreen">⛶ Plein écran</button>
+        <div>
+          <h3>{{ cam.name }}</h3>
+          <p class="muted">Zoom plein écran pour suivre le set.</p>
+        </div>
+        <div class="webcam-actions">
+          <a href="{{ cam.iframe }}" target="_blank" class="webcam-btn">🎥 Live</a>
+          <button class="webcam-fullscreen">⛶ Plein écran</button>
+        </div>
       </div>
     </div>
     {% endfor %}

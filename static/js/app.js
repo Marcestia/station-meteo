@@ -93,7 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const sections = {
     weather: [document.getElementById('section-weather'), document.getElementById('section-weather-extra')],
     wind: [document.getElementById('section-wind')],
-    surf: [document.getElementById('section-surf')],
+    surf: [document.getElementById('section-surf'), document.getElementById('section-surf-headline')],
     webcams: [document.getElementById('section-webcams')],
     generalWeather: [document.getElementById('section-general-weather')],
     openmeteoWeather: [document.getElementById('section-openmeteo-weather')]
