@@ -1,12 +1,17 @@
-from flask import Flask, request, jsonify, render_template
 import datetime
-import requests
-from siphon.catalog import TDSCatalog
-import numpy as np
+import json
 import math
-from meteostat import Point, Hourly, Stations
+import os
+
+import numpy as np
+import requests
+from flask import Flask, jsonify, render_template, request
+from meteostat import Hourly, Point, Stations
+from openai import OpenAI
+from siphon.catalog import TDSCatalog
 
 app = Flask(__name__)
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY")) if os.getenv("OPENAI_API_KEY") else None
 
 latest_data = {
     'temperature': None,
@@ -406,6 +411,101 @@ def get_surf_score(entry):
     }
 
 
+def _build_local_briefing(location_key, current_temperature, current_wind_speed, current_wind_direction, openmeteo_forecast, surf_forecast):
+    parts = [f"📍 Spot : {location_key.capitalize()}"]
+
+    if current_temperature is not None:
+        parts.append(f"🌡️ {current_temperature:.1f}°C maintenant")
+
+    if current_wind_speed is not None and current_wind_direction is not None:
+        parts.append(
+            f"💨 Vent {current_wind_speed * 1.94384:.1f} nds (dir {current_wind_direction:.0f}°)"
+        )
+
+    if openmeteo_forecast and openmeteo_forecast.get("precipitation"):
+        rain_next_hours = [p for p in openmeteo_forecast["precipitation"][:6] if p is not None]
+        if rain_next_hours:
+            avg_rain = sum(rain_next_hours) / len(rain_next_hours)
+            parts.append(f"🌦️ Précipitations moyennes prochaines heures : {avg_rain:.1f} mm")
+
+    if surf_forecast:
+        best_window = sorted(surf_forecast, key=lambda x: x.get("period", 0), reverse=True)[0]
+        parts.append(
+            f"🏄‍♂️ Houle {best_window.get('height', 0):.1f} m @ {best_window.get('period', 0):.0f}s — vent {best_window.get('wind_speed', 0) * 1.94384:.1f} nds"
+        )
+
+    return "\n".join(parts)
+
+
+def generate_ai_briefing(location_key, current_temperature, current_wind_speed, current_wind_direction, openmeteo_forecast, surf_forecast):
+    base_message = _build_local_briefing(
+        location_key,
+        current_temperature,
+        current_wind_speed,
+        current_wind_direction,
+        openmeteo_forecast,
+        surf_forecast,
+    )
+
+    if not openai_client:
+        return {
+            "title": "Briefing IA",
+            "content": base_message + "\n⚙️ Ajoute OPENAI_API_KEY pour activer la synthèse IA.",
+            "provider": "Local",
+            "status": "placeholder",
+        }
+
+    try:
+        preview_points = []
+        if openmeteo_forecast:
+            for i, t in enumerate(openmeteo_forecast.get("forecast_time", [])[:5]):
+                preview_points.append(
+                    f"- {t}: {openmeteo_forecast['temperature'][i]:.1f}°C, vent {openmeteo_forecast['wind_speed'][i]:.1f} m/s, pluie {openmeteo_forecast['precipitation'][i]} mm"
+                )
+
+        surf_line = ""
+        if surf_forecast:
+            best = sorted(surf_forecast, key=lambda x: x.get("period", 0), reverse=True)[0]
+            surf_line = (
+                f"Swell {best.get('height', 0):.1f} m @ {best.get('period', 0):.0f}s, vent {best.get('wind_speed', 0) * 1.94384:.1f} nds"
+            )
+
+        completion = openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            temperature=0.4,
+            max_tokens=260,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Tu es un coach météo/surf. Sois concis (3 à 5 puces) et propose un conseil smartphone-friendly.",
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Lieu: {location_key}.\n"
+                        f"Conditions actuelles: {base_message}.\n"
+                        f"Fenêtre surf: {surf_line}.\n"
+                        f"Prévisions: {' '.join(preview_points)}"
+                    ),
+                },
+            ],
+        )
+
+        content = completion.choices[0].message.content
+        return {
+            "title": "Briefing IA",
+            "content": content,
+            "provider": "gpt-4o-mini",
+            "status": "ok",
+        }
+
+    except Exception as exc:  # pragma: no cover - dépend d'un service externe
+        return {
+            "title": "Briefing IA",
+            "content": base_message + f"\n⚠️ Synthèse IA indisponible ({exc}).",
+            "provider": "Local",
+            "status": "error",
+        }
 
 
 @app.route('/')
@@ -587,6 +687,15 @@ def dashboard():
 
     grouped_surf_forecast = group_surf_forecast_by_day(surf_forecast_filtered)
 
+    ai_briefing = generate_ai_briefing(
+        location_key,
+        current_temperature,
+        current_wind_speed,
+        current_wind_direction,
+        openmeteo_forecast,
+        surf_forecast_filtered,
+    )
+
     # ---- Webcams par location ----
     webcams_by_location = {
         "anglet": [
@@ -626,13 +735,12 @@ def dashboard():
         locations_coords=locations_coords,
         webcams=webcams,
         meteostat_forecast=meteostat_forecast ,
-        openmeteo_forecast=openmeteo_forecast  # ✅ AJOUT IMPORTANT
+        openmeteo_forecast=openmeteo_forecast,
+        ai_briefing=ai_briefing,
     )
 
 
 cached_surf_data = {"timestamp": None, "data": None}
-import os
-import json
 
 @app.template_filter('datetimeformat')
 def datetimeformat(value, format='%d/%m/%Y'):

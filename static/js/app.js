@@ -96,24 +96,25 @@ document.addEventListener("DOMContentLoaded", () => {
     surf: [document.getElementById('section-surf')],
     webcams: [document.getElementById('section-webcams')],
     generalWeather: [document.getElementById('section-general-weather')],
-    openmeteoWeather: [document.getElementById('section-openmeteo-weather')] // ✅ Ajout Open-Meteo
-    };
+    openmeteoWeather: [document.getElementById('section-openmeteo-weather')]
+  };
 
-    const toggles = {
-        weather: document.getElementById('toggle-weather'),
-        wind: document.getElementById('toggle-wind'),
-        surf: document.getElementById('toggle-surf'),
-        webcams: document.getElementById('toggle-webcams'),
-        generalWeather: document.getElementById('toggle-general-weather'),
-        openmeteoWeather: document.getElementById('toggle-openmeteo-weather') // ✅ Ajout Open-Meteo
-    };
-
+  const toggles = {
+    weather: document.getElementById('toggle-weather'),
+    wind: document.getElementById('toggle-wind'),
+    surf: document.getElementById('toggle-surf'),
+    webcams: document.getElementById('toggle-webcams'),
+    generalWeather: document.getElementById('toggle-general-weather'),
+    openmeteoWeather: document.getElementById('toggle-openmeteo-weather')
+  };
 
   for (const key in toggles) {
+    if (!toggles[key]) continue;
     const saved = localStorage.getItem(`show_${key}`);
-    toggles[key].checked = saved === 'true';
+    const shouldShow = saved === null ? true : saved === 'true';
+    toggles[key].checked = shouldShow;
     sections[key].forEach(sec => {
-      if (sec) sec.classList.toggle('visible', toggles[key].checked);
+      if (sec) sec.classList.toggle('visible', shouldShow);
     });
 
     toggles[key].addEventListener('change', () => {

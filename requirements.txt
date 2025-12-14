@@ -7,3 +7,5 @@ meteostat
 numpy
 pandas
 gunicorn
+
+openai
