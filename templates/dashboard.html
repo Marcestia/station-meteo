@@ -3,265 +3,119 @@
 {% block title %}Météo - {{ selected_location|capitalize }}{% endblock %}
 
 {% block content %}
-
-<!-- Paramètres -->
-<section class="card settings">
-  <h2>🔧 Paramètres</h2>
-  <form class="settings-form" onsubmit="return false;">
-    <!-- Sélection du lieu -->
-    <div class="form-group">
-      <label for="location">📍 Lieu :</label>
-      <select id="location" class="menu-select">
-        {% for loc in locations_coords.keys() %}
-          <option value="{{ loc }}" {% if selected_location == loc %}selected{% endif %}>{{ loc|capitalize }}</option>
-        {% endfor %}
-      </select>
-    </div>
-
-    <!-- Choix des sections -->
-    <div class="form-group">
-      <label>📌 Afficher :</label>
-      <div>
-        <label><input type="checkbox" id="toggle-weather"> Météo du jour</label><br>
-        <label><input type="checkbox" id="toggle-wind"> Prévisions Vent</label><br>
-        <label><input type="checkbox" id="toggle-surf"> Prévisions Surf</label><br>
-        <label><input type="checkbox" id="toggle-webcams"> Webcams</label>
-        <label><input type="checkbox" id="toggle-general-weather"> Météo générale</label>
-        <label><input type="checkbox" id="toggle-openmeteo-weather"> Prévisions Open-Meteo</label>
-
-      </div>
-    </div>
-  </form>
-</section>
-
-
-<!-- Station locale -->
-<section class="card" id="section-station">
-  <h2>🛰️ Station locale</h2>
-
-  <div class="station-live">
-    <div class="station-item">
-      <div class="station-label">Température</div>
-      <div class="station-value">
-        {% if temperature is not none %}
-          {{ temperature|round(1) }}<span class="unit">°C</span>
-        {% else %} — {% endif %}
-      </div>
-    </div>
-
-    <div class="station-item">
-      <div class="station-label">Humidité</div>
-      <div class="station-value">
-        {% if humidity is not none %}
-          {{ humidity|round(1) }}<span class="unit">%</span>
-        {% else %} — {% endif %}
-      </div>
-    </div>
-
-    <div class="station-timestamp">
-      ⏱ Dernière mesure : {{ timestamp or '—' }}
-    </div>
+<section class="glass hero">
+  <div>
+    <p class="eyebrow">{{ current_date }}</p>
+    <h2>{{ selected_location|capitalize }}</h2>
+    <p class="muted">Mise à jour automatique • Sources Open-Meteo / StormGlass / station locale</p>
+  </div>
+  <div class="picker">
+    <label for="location">Lieu</label>
+    <select id="location" class="picker-select">
+      {% for loc in locations_coords.keys() %}
+        <option value="{{ loc }}" {% if selected_location == loc %}selected{% endif %}>{{ loc|capitalize }}</option>
+      {% endfor %}
+    </select>
   </div>
 </section>
 
-
-
-
-<!-- Météo actuelle -->
-<section class="card weather-today section-toggle" id="section-weather">
-  <h2>🌤️ Météo du jour</h2>
-  <div class="weather-info">
-    <div class="weather-icon">
-      {% if current_precipitation == 0 and current_cloud_cover < 20 %}☀️
-      {% elif current_precipitation == 0 and current_cloud_cover < 50 %}🌤️
-      {% elif current_precipitation >= 0 %}🌧️
-      {% else %}☁️{% endif %}
+<section class="glass now">
+  <div class="temp-block">
+    <div class="temp-value">{{ current_temperature|round(1) if current_temperature is not none else '—' }}°</div>
+    <div class="temp-meta">
+      <p class="primary">Ciel {{ current_cloud_cover|default('—') }}% • pluie {{ current_precipitation|default('0') }}mm</p>
+      <p class="muted">Vent {{ (current_wind_speed * 1.94384)|round(1) if current_wind_speed else '—' }} nds / {{ current_wind_direction|round(0) if current_wind_direction else '—' }}°</p>
     </div>
-    <div>
-      <p>🌡 Température : <strong>{{ current_temperature|round(1) if current_temperature else "N/A" }} °C</strong></p>
-      <p>💨 Vent : <strong>{{ (current_wind_speed * 1.94384)|round(1) if current_wind_speed else "N/A" }} nds</strong>
-        <span class="wind-arrow" style="transform: rotate({{ current_wind_direction|round(0) if current_wind_direction else 0 }}deg);">↑</span>
-      </p>
-    </div>
+  </div>
+  <div class="chips-row">
+    <span class="chip">Station {{ timestamp or '—' }}</span>
+    <span class="chip">{{ temperature|round(1) if temperature is not none else '—' }}°C</span>
+    <span class="chip">{{ humidity|round(0) if humidity is not none else '—' }}% HR</span>
+    <span class="chip ghost">Bulletin {{ bulletin_date_label }}</span>
   </div>
 </section>
 
-<!-- Bulletin météo -->
-<section class="card section-toggle" id="section-weather-extra">
-  <h2>🕘 {{ bulletin_date_label }}</h2>
-  <div class="bulletin-grid">
+<section class="section-title">Heures clés</section>
+<section class="glass scroll-cards">
+  <div class="pill-tray">
     {% for item in daily_bulletin %}
-      <div class="bulletin-item">
-        <div class="bulletin-icon">{{ item.icon }}</div>
-        <div><strong>{{ item.hour }}</strong></div>
-        <div>{{ item.temp }}</div>
+      <div class="pill-card">
+        <div class="pill-hour">{{ item.hour }}</div>
+        <div class="pill-icon">{{ item.icon }}</div>
+        <div class="pill-temp">{{ item.temp }}</div>
       </div>
     {% endfor %}
   </div>
 </section>
 
-<!-- Prévisions Vent -->
-<section class="card wind-forecast section-toggle" id="section-wind">
-  <h2>💨 Prévisions Vent</h2>
-  <div class="wind-grid">
-    {% for date, entries in grouped_avg.items() %}
-      <h3 class="wind-day">{{ date }}</h3>
-      <div class="wind-cards">
-        {% for entry in entries %}
-          {% set ws_kt = (entry.speed * 1.94384)|round(1) %}
-          {% if ws_kt < 8 %}
-            {% set color_class = "wind-low" %}
-          {% elif ws_kt < 15 %}
-            {% set color_class = "wind-medium" %}
-          {% else %}
-            {% set color_class = "wind-high" %}
-          {% endif %}
-          <div class="wind-card {{ color_class }}">
-            <div class="wind-time">{{ entry.time }}</div>
-            <div class="wind-speed">{{ ws_kt }} nds</div>
-            <div class="wind-dir" style="transform: rotate({{ entry.direction|round(0) }}deg);">↑</div>
-          </div>
-        {% endfor %}
+<section class="split">
+  <div class="glass block">
+    <div class="block-head">
+      <div>
+        <p class="eyebrow">Vent</p>
+        <h3>Brise heure par heure</h3>
       </div>
-    {% endfor %}
-  </div>
-</section>
-
-
-
-<!-- Météo générale -->
-<section class="card section-toggle" id="section-general-weather">
-  <h2>📋 Météo générale (Meteostat)</h2>
-  {% if meteostat_forecast %}
-    {% set grouped_days = {} %}
-    {% for i in range(meteostat_forecast.forecast_time|length) %}
-      {% set date_str = meteostat_forecast.forecast_time[i][:10] %}
-      {% if date_str not in grouped_days %}
-        {% set _ = grouped_days.update({date_str: []}) %}
-      {% endif %}
-      {% set _ = grouped_days[date_str].append(i) %}
-    {% endfor %}
-
-    {% for day, indexes in grouped_days.items() %}
-      <h3 class="general-weather-day">{{ day }}</h3>
-      <div class="general-weather-table-wrapper">
-        <table class="general-weather-table">
-          <thead>
-            <tr>
-              <th>Heure</th>
-              <th>🌡 Temp (°C)</th>
-              <th>💧 Hum (%)</th>
-              <th>🔽 Press (hPa)</th>
-              <th>🌧 Précip (mm)</th>
-              <th>☁️ Nuages (%)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for idx in indexes %}
-              <tr>
-                <td>{{ meteostat_forecast.forecast_time[idx][11:16] }}</td>
-                <td>{{ meteostat_forecast.temperature[idx]|default('N/A') }}</td>
-                <td>{{ meteostat_forecast.humidity[idx]|default('N/A') }}</td>
-                <td>{{ meteostat_forecast.pressure[idx]|default('N/A') }}</td>
-                <td>{{ meteostat_forecast.precipitation[idx]|default('0') }}</td>
-                <td>{{ meteostat_forecast.cloud_cover[idx]|default('N/A') }}</td>
-              </tr>
+    </div>
+    <div class="wind-columns">
+      {% for date, entries in grouped_avg.items() %}
+        <div class="wind-day">
+          <p class="muted">{{ date }}</p>
+          <div class="wind-row">
+            {% for entry in entries[:8] %}
+              {% set ws_kt = (entry.speed * 1.94384)|round(1) %}
+              <div class="wind-chip">
+                <span class="label">{{ entry.time }}</span>
+                <span class="value">{{ ws_kt }} nds</span>
+                <span class="arrow" style="transform: rotate({{ entry.direction|round(0) }}deg);">↑</span>
+              </div>
             {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% endfor %}
-  {% else %}
-    <p>Aucune donnée Meteostat disponible pour cette localisation.</p>
-  {% endif %}
-</section>
-
-<section class="card section-toggle" id="section-openmeteo-weather">
-  <h2>📋 Prévisions détaillées (Open-Meteo)</h2>
-  {% if openmeteo_forecast %}
-    {% set grouped_days = {} %}
-    {% for i in range(openmeteo_forecast.forecast_time|length) %}
-      {% set date_str = openmeteo_forecast.forecast_time[i][:10] %}
-      {% if date_str not in grouped_days %}
-        {% set _ = grouped_days.update({date_str: []}) %}
-      {% endif %}
-      {% set _ = grouped_days[date_str].append(i) %}
-    {% endfor %}
-
-    {% for day, indexes in grouped_days.items() %}
-      <div class="weather-day-block">
-        <div class="weather-day-header">{{ day }}</div>
-        <div class="weather-table-wrapper">
-          <table class="weather-table">
-            <thead>
-              <tr>
-                <th>Heure</th>
-                <th>🌡</th>
-                <th>💧</th>
-                <th>💨</th>
-                <th>🌧</th>
-                <th>☁️</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for idx in indexes %}
-                <tr class="
-                  {% if openmeteo_forecast.precipitation[idx] > 0 %} rain-row {% endif %}
-                  {% if openmeteo_forecast.wind_speed[idx] > 10 %} strong-wind {% endif %}
-                  {% if openmeteo_forecast.cloud_cover[idx] > 80 %} cloudy {% endif %}
-                ">
-                  <td>{{ openmeteo_forecast.forecast_time[idx][11:16] }}</td>
-                  <td>{{ openmeteo_forecast.temperature[idx]|round(1) }}°C</td>
-                  <td>{{ openmeteo_forecast.humidity[idx]|default('N/A') }}%</td>
-                  <td>{{ openmeteo_forecast.wind_speed[idx]|round(1) }}</td>
-                  <td>{{ openmeteo_forecast.precipitation[idx]|default(0) }}</td>
-                  <td>{{ openmeteo_forecast.cloud_cover[idx]|default('N/A') }}</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          </div>
         </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="glass block">
+    <div class="block-head">
+      <div>
+        <p class="eyebrow">Surf</p>
+        <h3>{{ surf_snapshot.headline }}</h3>
+        <p class="muted">Eau {{ surf_snapshot.water_temp if surf_snapshot.water_temp else '—' }}°C • meilleures fenêtres à surveiller</p>
       </div>
-    {% endfor %}
-  {% else %}
-    <p>Aucune donnée Open-Meteo disponible pour cette localisation.</p>
-  {% endif %}
+      <span class="chip ghost">Source {{ surf_source|replace('-', ' ') }}</span>
+    </div>
+    <div class="surf-grid">
+      {% for w in surf_snapshot.next_windows %}
+        <div class="surf-card">
+          <div class="surf-top">
+            <span class="chip soft">{{ w.label }}</span>
+            <span class="pill">{{ w.score.emoji }}</span>
+          </div>
+          <div class="surf-details">
+            <div>🌊 {{ w.height|round(1) }} m @ {{ w.period|round(0) }}s</div>
+            <div>💨 {{ (w.wind_speed * 1.94384)|round(1) if w.wind_speed else '—' }} nds • {{ w.wind_dir|round(0) if w.wind_dir else '—' }}°</div>
+          </div>
+        </div>
+      {% else %}
+        <p class="muted">Pas de créneau surf détecté.</p>
+      {% endfor %}
+    </div>
+  </div>
 </section>
 
-
-
-
-
-
-
-
-<!-- Carte -->
-<section class="card">
-  <h2>🗺️ Carte des Spots</h2>
-  <div id="map" style="height: 500px; width: 100%; border-radius: 12px;"></div>
-</section>
-
-<!-- Prévisions Houle -->
-<section class="card surf-forecast section-toggle" id="section-surf">
-  <h2>🌊 Prévisions de Houle</h2>
+<section class="section-title">Houle détaillée</section>
+<section class="glass block">
   {% for date, data in grouped_surf_forecast.items() %}
     <div class="day-block">
-      <h3 class="day-title">{{ data.label|capitalize }}</h3>
-      <div class="forecast-grid">
+      <div class="day-head">{{ data.label|capitalize }}</div>
+      <div class="forecast-row">
         {% for entry in data.entries %}
-          <div class="forecast-card quality-{{ entry.surf_score.emoji }}">
-            <div class="forecast-time">{{ entry.time }}</div>
-            <div class="forecast-info">
-              <div class="wave">
-                🌊 {{ entry.height|round(1) }} m
-                <small>⏱ {{ entry.period|round(0) }} s</small>
-              </div>
-              <div class="wind">
-                💨 {{ (entry.wind_speed * 1.94384)|round(1) }} nds
-                <span class="wind-arrow" style="transform: rotate({{ entry.wind_dir|round(0) }}deg);">↑</span>
-              </div>
-            </div>
-            <div class="surf-score">{{ entry.surf_score.emoji }}</div>
+          <div class="forecast-card">
+            <div class="muted">{{ entry.time }}</div>
+            <div class="strong">{{ entry.height|round(1) }} m @ {{ entry.period|round(0) }}s</div>
+            <div class="muted">Vent {{ (entry.wind_speed * 1.94384)|round(1) }} nds / {{ entry.wind_dir|round(0) }}°</div>
+            {% if entry.water_temp %}<span class="chip soft">Eau {{ entry.water_temp|round(1) }}°C</span>{% endif %}
+            {% if entry.sea_level %}<span class="chip soft">Marée {{ entry.sea_level|round(2) }} m</span>{% endif %}
           </div>
         {% endfor %}
       </div>
@@ -269,40 +123,38 @@
   {% endfor %}
 </section>
 
-<!-- Modal pour plein écran -->
-<div id="webcam-modal" class="modal">
-  <div class="modal-content">
-    <span class="modal-close">&times;</span>
-    <iframe id="modal-iframe" src="" style="width:100%; height:100%; border:none;"></iframe>
-  </div>
-</div>
-
-<!-- Webcams -->
-<section class="card webcam-section section-toggle" id="section-webcams">
-  <h2>📹 Webcams en direct</h2>
+<section class="section-title">Webcams</section>
+<section class="glass block">
   <div class="webcam-grid">
     {% for cam in webcams %}
-    <div class="webcam-card" data-iframe="{{ cam.iframe }}">
-      <iframe src="{{ cam.iframe }}"
-        style="width:100%; height:250px; border:none; border-radius:8px;"
-        allowfullscreen>
-      </iframe>
-      <div class="webcam-info">
-        <h3>{{ cam.name }}</h3>
-        <a href="{{ cam.iframe }}" target="_blank" class="webcam-btn">🎥 Voir en direct</a>
-        <button class="webcam-fullscreen">⛶ Plein écran</button>
+      <div class="webcam-card" data-iframe="{{ cam.iframe }}">
+        <div class="webcam-frame">
+          <iframe src="{{ cam.iframe }}" allowfullscreen></iframe>
+        </div>
+        <div class="webcam-info">
+          <div>
+            <h4>{{ cam.name }}</h4>
+            <p class="muted">Appuie pour plein écran</p>
+          </div>
+          <div class="webcam-actions">
+            <a class="chip" href="{{ cam.iframe }}" target="_blank">Voir</a>
+            <button class="chip ghost webcam-fullscreen">⛶</button>
+          </div>
+        </div>
       </div>
-    </div>
     {% endfor %}
   </div>
 </section>
 
-<!-- Refresh -->
-<section class="card">
-  <p class="refresh-note">
-    Actualisation automatique toutes les 60s |
-    <button id="refreshBtn" class="btn-secondary">🔄 Actualiser</button>
-  </p>
+<section class="section-title">Carte des spots</section>
+<section class="glass block">
+  <div id="map" class="map"></div>
 </section>
 
+<div id="webcam-modal" class="modal">
+  <div class="modal-content">
+    <span class="modal-close">&times;</span>
+    <iframe id="modal-iframe" src=""></iframe>
+  </div>
+</div>
 {% endblock %}

@@ -11,13 +11,13 @@
 </head>
 <body>
   <header class="header">
-    <div class="header-left">
-      <div class="earth-container">
-        <img src="{{ url_for('static', filename='images/earth.png') }}" alt="Earth" class="earth">
-      </div>
-      <h1 class="header-title">Dashboard Météo</h1>
+    <div>
+      <p class="eyebrow">Station météo & surf</p>
+      <h1 class="header-title">Vue rapide</h1>
     </div>
-    <button id="darkModeToggle" class="btn-secondary">🌙 Mode sombre</button>
+    <div class="header-actions">
+      <button id="refreshBtn" class="chip ghost">↻ Actualiser</button>
+    </div>
   </header>
 
 
