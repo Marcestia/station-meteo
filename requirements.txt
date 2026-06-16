@@ -1,9 +1,7 @@
-
-
 Flask
 requests
 siphon
-meteostat
+meteostat==1.6.8
 numpy
 pandas
 gunicorn

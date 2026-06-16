@@ -109,9 +109,13 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
 
+  const defaultVisibleSections = new Set(['weather', 'wind', 'surf']);
+
   for (const key in toggles) {
+    if (!toggles[key]) continue;
+
     const saved = localStorage.getItem(`show_${key}`);
-    toggles[key].checked = saved === 'true';
+    toggles[key].checked = saved === null ? defaultVisibleSections.has(key) : saved === 'true';
     sections[key].forEach(sec => {
       if (sec) sec.classList.toggle('visible', toggles[key].checked);
     });

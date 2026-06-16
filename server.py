@@ -1,10 +1,11 @@
 from flask import Flask, request, jsonify, render_template
 import datetime
+import json
+import os
+from pathlib import Path
+
 import requests
-from siphon.catalog import TDSCatalog
-import numpy as np
 import math
-from meteostat import Point, Hourly, Stations
 
 app = Flask(__name__)
 
@@ -61,7 +62,7 @@ def get_openmeteo_forecast(lat, lon):
             "&hourly=temperature_2m,relativehumidity_2m,wind_speed_10m,wind_direction_10m,precipitation,cloudcover"
             "&timezone=UTC"
         )
-        response = requests.get(url)
+        response = requests.get(url, timeout=15)
         response.raise_for_status()
         data = response.json()
         hourly = data["hourly"]
@@ -123,6 +124,9 @@ def get_openmeteo_forecast(lat, lon):
 
 def get_gfs_forecast(lat, lon):
     try:
+        from siphon.catalog import TDSCatalog
+        import numpy as np
+
         print("[DEBUG] Appel GFS pour lat=", lat, "lon=", lon)
         cat = TDSCatalog('http://thredds.ucar.edu/thredds/catalog/grib/NCEP/GFS/Global_0p25deg/catalog.xml')
         print("[DEBUG] Catalogue GFS chargé")
@@ -215,6 +219,8 @@ def clean_meteostat_value(val):
 
 def get_meteostat_forecast(lat, lon):
     try:
+        from meteostat import Point, Hourly, Stations
+
         location = Point(lat, lon)
         now = datetime.datetime.utcnow()
         end = now + datetime.timedelta(hours=72)
@@ -426,8 +432,9 @@ def dashboard():
     print("[DEBUG] StormGlass surf data:", surf_forecast[:3])  # debug
 
     # ---- Prévisions météo/vent ----
-    gfs_forecast = get_gfs_forecast(coords["lat"], coords["lon"])
-    meteostat_forecast = get_meteostat_forecast(coords["lat"], coords["lon"])
+    enable_heavy_models = os.environ.get("ENABLE_HEAVY_MODELS") == "1"
+    gfs_forecast = get_gfs_forecast(coords["lat"], coords["lon"]) if enable_heavy_models else None
+    meteostat_forecast = get_meteostat_forecast(coords["lat"], coords["lon"]) if enable_heavy_models else None
     openmeteo_forecast = get_openmeteo_forecast(coords["lat"], coords["lon"])
 
     grouped_avg = {}
@@ -631,21 +638,23 @@ def dashboard():
 
 
 cached_surf_data = {"timestamp": None, "data": None}
-import os
-import json
 
 @app.template_filter('datetimeformat')
 def datetimeformat(value, format='%d/%m/%Y'):
     return datetime.datetime.fromisoformat(value).strftime(format)
 
-CACHE_FILE = "stormglass_cache.json"
+CACHE_FILE = Path(os.environ.get("STORMGLASS_CACHE_FILE", "/tmp/stormglass_cache.json"))
 
 def fetch_stormglass_data(lat, lon):
     try:
         now = datetime.datetime.utcnow()
         end = now + datetime.timedelta(days=7)
 
-        api_key = "8396cbf4-634d-11f0-80b9-0242ac130006-8396cd02-634d-11f0-80b9-0242ac130006"
+        api_key = os.environ.get("STORMGLASS_API_KEY")
+        if not api_key:
+            print("[StormGlass WARN] Variable STORMGLASS_API_KEY absente")
+            return []
+
         headers = { "Authorization": api_key }
 
         url = (
@@ -658,7 +667,7 @@ def fetch_stormglass_data(lat, lon):
             # f"&source=noaa"  # optionnel : tu peux commenter pour tester les autres sources
         )
 
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
         data = response.json()
 
@@ -702,9 +711,9 @@ def get_cached_stormglass_forecast():
     now = datetime.datetime.utcnow()
 
     # Lire le cache s'il existe
-    if os.path.exists(CACHE_FILE):
+    if CACHE_FILE.exists():
         try:
-            with open(CACHE_FILE, "r") as f:
+            with CACHE_FILE.open("r") as f:
                 cached = json.load(f)
                 timestamp_str = cached.get("timestamp", None)
                 if timestamp_str:
@@ -712,7 +721,7 @@ def get_cached_stormglass_forecast():
                     if (now - timestamp).total_seconds() <  5*3600:
                         return cached.get("data", {})
         except Exception as e:
-            print(f"[CACHE READ ERROR] stormglass_cache.json: {e}")
+            print(f"[CACHE READ ERROR] {CACHE_FILE}: {e}")
 
     # Si cache invalide ou inexistant, appeler l'API pour les spots ciblés
     data = {}
@@ -722,13 +731,14 @@ def get_cached_stormglass_forecast():
         data[loc_key] = fetch_stormglass_data(coords["lat"], coords["lon"])
 
     try:
-        with open(CACHE_FILE, "w") as f:
+        CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with CACHE_FILE.open("w") as f:
             json.dump({
                 "timestamp": now.isoformat(),
                 "data": data
             }, f)
     except Exception as e:
-        print(f"[CACHE WRITE ERROR] stormglass_cache.json: {e}")
+        print(f"[CACHE WRITE ERROR] {CACHE_FILE}: {e}")
 
     return data
 
@@ -738,4 +748,5 @@ def get_cached_stormglass_forecast():
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG") == "1")

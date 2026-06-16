@@ -15,9 +15,12 @@
       <div class="earth-container">
         <img src="{{ url_for('static', filename='images/earth.png') }}" alt="Earth" class="earth">
       </div>
-      <h1 class="header-title">Dashboard Météo</h1>
+      <div>
+        <p class="header-kicker">Station météo live</p>
+        <h1 class="header-title">Dashboard Météo</h1>
+      </div>
     </div>
-    <button id="darkModeToggle" class="btn-secondary">🌙 Mode sombre</button>
+    <button id="darkModeToggle" class="btn-secondary theme-toggle" aria-label="Changer le thème">🌙 Mode sombre</button>
   </header>
 
 
