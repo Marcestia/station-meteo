@@ -5,38 +5,44 @@
 {% block content %}
 
 <!-- Paramètres -->
-<section class="card settings">
-  <h2>🔧 Paramètres</h2>
-  <form class="settings-form" onsubmit="return false;">
-    <!-- Sélection du lieu -->
-    <div class="form-group">
-      <label for="location">📍 Lieu :</label>
-      <select id="location" class="menu-select">
-        {% for loc in locations_coords.keys() %}
-          <option value="{{ loc }}" {% if selected_location == loc %}selected{% endif %}>{{ loc|capitalize }}</option>
-        {% endfor %}
-      </select>
-    </div>
+<section class="hero-panel">
+  <div class="hero-copy">
+    <span class="eyebrow">📍 Spot sélectionné</span>
+    <h2>{{ selected_location|capitalize }}</h2>
+    <p>Choisis ton spot, puis active uniquement les infos utiles : météo, vent, surf, webcams ou données détaillées.</p>
+  </div>
 
-    <!-- Choix des sections -->
-    <div class="form-group">
-      <label>📌 Afficher :</label>
-      <div>
-        <label><input type="checkbox" id="toggle-weather"> Météo du jour</label><br>
-        <label><input type="checkbox" id="toggle-wind"> Prévisions Vent</label><br>
-        <label><input type="checkbox" id="toggle-surf"> Prévisions Surf</label><br>
-        <label><input type="checkbox" id="toggle-webcams"> Webcams</label>
-        <label><input type="checkbox" id="toggle-general-weather"> Météo générale</label>
-        <label><input type="checkbox" id="toggle-openmeteo-weather"> Prévisions Open-Meteo</label>
-
-      </div>
-    </div>
+  <form class="settings-card" onsubmit="return false;">
+    <label class="field-label" for="location">Changer de lieu</label>
+    <select id="location" class="menu-select">
+      {% for loc in locations_coords.keys() %}
+        <option value="{{ loc }}" {% if selected_location == loc %}selected{% endif %}>{{ loc|capitalize }}</option>
+      {% endfor %}
+    </select>
   </form>
+</section>
+
+<section class="card section-control-card">
+  <div class="section-control-head">
+    <div>
+      <span class="eyebrow">Vue rapide</span>
+      <h2>Afficher les modules</h2>
+    </div>
+    <span class="helper-pill">Tes choix sont mémorisés</span>
+  </div>
+  <div class="toggle-grid" aria-label="Modules du dashboard">
+    <label class="toggle-chip"><input type="checkbox" id="toggle-weather"><span>🌤️ Météo du jour</span></label>
+    <label class="toggle-chip"><input type="checkbox" id="toggle-wind"><span>💨 Vent</span></label>
+    <label class="toggle-chip"><input type="checkbox" id="toggle-surf"><span>🌊 Surf</span></label>
+    <label class="toggle-chip"><input type="checkbox" id="toggle-webcams"><span>📹 Webcams</span></label>
+    <label class="toggle-chip"><input type="checkbox" id="toggle-general-weather"><span>📋 Meteostat</span></label>
+    <label class="toggle-chip"><input type="checkbox" id="toggle-openmeteo-weather"><span>🔎 Open-Meteo</span></label>
+  </div>
 </section>
 
 
 <!-- Station locale -->
-<section class="card" id="section-station">
+<section class="card spotlight-card" id="section-station">
   <h2>🛰️ Station locale</h2>
 
   <div class="station-live">
@@ -236,9 +242,12 @@
 
 
 <!-- Carte -->
-<section class="card">
-  <h2>🗺️ Carte des Spots</h2>
-  <div id="map" style="height: 500px; width: 100%; border-radius: 12px;"></div>
+<section class="card map-card">
+  <div class="card-title-row">
+    <h2>🗺️ Carte des spots</h2>
+    <span class="helper-pill">Clique un marqueur</span>
+  </div>
+  <div id="map"></div>
 </section>
 
 <!-- Prévisions Houle -->
@@ -298,7 +307,7 @@
 </section>
 
 <!-- Refresh -->
-<section class="card">
+<section class="card refresh-card">
   <p class="refresh-note">
     Actualisation automatique toutes les 60s |
     <button id="refreshBtn" class="btn-secondary">🔄 Actualiser</button>
